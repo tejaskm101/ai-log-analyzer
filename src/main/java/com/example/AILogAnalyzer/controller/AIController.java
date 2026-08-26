@@ -1,5 +1,6 @@
 package com.example.AILogAnalyzer.controller;
 
+import com.example.AILogAnalyzer.dto.LogAnalysisResponseDTO;
 import com.example.AILogAnalyzer.entity.Log;
 import com.example.AILogAnalyzer.service.AIService;
 import com.example.AILogAnalyzer.service.LogService;
@@ -18,7 +19,7 @@ public class AIController {
     }
 
     @PostMapping("/analyze")
-    public String analyzeLog(@RequestBody String rawLog) {
+    public LogAnalysisResponseDTO analyzeLog(@RequestBody String rawLog) {
 
         Log log = logService.saveLog(rawLog);
 

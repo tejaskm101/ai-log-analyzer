@@ -1,8 +1,10 @@
 package com.example.AILogAnalyzer.service;
 
+import com.example.AILogAnalyzer.dto.LogAnalysisResponseDTO;
 import com.example.AILogAnalyzer.entity.Log;
 import com.example.AILogAnalyzer.entity.LogAnalysis;
 import com.example.AILogAnalyzer.repository.LogAnalysisRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.stereotype.Service;
 
@@ -11,16 +13,19 @@ public class AIService {
 
     private final ChatClient chatClient;
     private final LogAnalysisRepository logAnalysisRepository;
+    private final ObjectMapper objectMapper;
 
     public AIService(ChatClient.Builder chatClientBuilder,
-                     LogAnalysisRepository logAnalysisRepository) {
+                     LogAnalysisRepository logAnalysisRepository,
+                     ObjectMapper objectMapper) {
         this.chatClient = chatClientBuilder.build();
         this.logAnalysisRepository = logAnalysisRepository;
+        this.objectMapper = objectMapper;
     }
 
-    public String analyzeLog(Log log) {
+    public LogAnalysisResponseDTO analyzeLog(Log log) {
 
-        String analysis = chatClient.prompt()
+        LogAnalysisResponseDTO analysis = chatClient.prompt()
                 .user("""
                         Analyze the following application logs.
 
@@ -34,11 +39,18 @@ public class AIService {
                         %s
                         """.formatted(log.getRawContent()))
                 .call()
-                .content();
+                .entity(LogAnalysisResponseDTO.class);
 
         LogAnalysis logAnalysis = new LogAnalysis();
         logAnalysis.setLog(log);
-        logAnalysis.setAnalysis(analysis);
+
+        try {
+            logAnalysis.setAnalysis(
+                    objectMapper.writeValueAsString(analysis)
+            );
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to serialize AI analysis", e);
+        }
 
         logAnalysisRepository.save(logAnalysis);
 
