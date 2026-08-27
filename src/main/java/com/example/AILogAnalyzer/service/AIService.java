@@ -4,30 +4,34 @@ import com.example.AILogAnalyzer.dto.LogAnalysisResponseDTO;
 import com.example.AILogAnalyzer.entity.Log;
 import com.example.AILogAnalyzer.entity.LogAnalysis;
 import com.example.AILogAnalyzer.repository.LogAnalysisRepository;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.document.Document;
 import org.springframework.stereotype.Service;
+
+import java.util.List;
 
 @Service
 public class AIService {
 
     private final ChatClient chatClient;
     private final LogAnalysisRepository logAnalysisRepository;
-    private final ObjectMapper objectMapper;
 
     public AIService(ChatClient.Builder chatClientBuilder,
-                     LogAnalysisRepository logAnalysisRepository,
-                     ObjectMapper objectMapper) {
+                     LogAnalysisRepository logAnalysisRepository) {
         this.chatClient = chatClientBuilder.build();
         this.logAnalysisRepository = logAnalysisRepository;
-        this.objectMapper = objectMapper;
     }
 
-    public LogAnalysisResponseDTO analyzeLog(Log log) {
+    public LogAnalysisResponseDTO analyzeLog(Log log, List<Document> similarLogs) {
+
+        String historicalContext = similarLogs.stream()
+                .map(Document::getText)
+                .reduce("", (context, oldLog) ->
+                        context + "\n--- Historical Log ---\n" + oldLog);
 
         LogAnalysisResponseDTO analysis = chatClient.prompt()
                 .user("""
-                        Analyze the following application logs.
+                        Analyze the following application log.
 
                         Identify:
                         1. The severity of the issue
@@ -35,22 +39,31 @@ public class AIService {
                         3. Relevant evidence from the logs
                         4. Recommended investigation steps
 
-                        Logs:
+                        Current Log:
                         %s
-                        """.formatted(log.getRawContent()))
+
+                        Relevant Historical Logs:
+                        %s
+
+                        Use the historical logs as additional context.
+                        Generate a NEW analysis specifically for the current log.
+                        Do not simply copy or repeat previous information.
+                        """.formatted(
+                        log.getRawContent(),
+                        historicalContext))
                 .call()
                 .entity(LogAnalysisResponseDTO.class);
 
         LogAnalysis logAnalysis = new LogAnalysis();
         logAnalysis.setLog(log);
 
-        try {
-            logAnalysis.setAnalysis(
-                    objectMapper.writeValueAsString(analysis)
-            );
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to serialize AI analysis", e);
-        }
+        String analysisText =
+                "Severity: " + analysis.getSeverity()
+                        + "\nProbable Cause: " + analysis.getProbableCause()
+                        + "\nEvidence: " + analysis.getEvidence()
+                        + "\nRecommendations: " + analysis.getRecommendations();
+
+        logAnalysis.setAnalysis(analysisText);
 
         logAnalysisRepository.save(logAnalysis);
 
